@@ -1,0 +1,593 @@
+substitutions:
+  device_name: 'linak-jacob-seng'
+  friendly_name: 'Jacob Seng'
+  device_description: "Bluetooth kontrol af elevationsseng"
+  project_version: "1.0.0"
+  log_level: INFO
+  mac_address: "D2:3E:FE:30:27:F9" ## Change this to your beds unique mac-addresse 
+
+packages:
+  device_base: !include common/base.yaml
+
+esphome:
+  name: ${device_name}
+  comment: '${device_description}'
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf 
+
+esp32_ble_tracker:
+  scan_parameters:
+    duration: 30s
+#FOR DEBUG ONLY:
+#  on_ble_advertise:
+#    - mac_address: xx:xx:xx:xx:xx:xx
+#      then:
+#        - lambda: |-
+#            ESP_LOGD("ble_adv", "New BLE device");
+#            ESP_LOGD("ble_adv", "  address: %s", x.address_str().c_str());
+#            ESP_LOGD("ble_adv", "  name: %s", x.get_name().c_str());
+#            ESP_LOGD("ble_adv", "  Advertised service UUIDs:");
+#            for (auto uuid : x.get_service_uuids()) {
+#                ESP_LOGD("ble_adv", "    - %s", uuid.to_string().c_str());
+#            }
+#            ESP_LOGD("ble_adv", "  Advertised service data:");
+#            for (auto data : x.get_service_datas()) {
+#                ESP_LOGD("ble_adv", "    - %s: (length %i)", data.uuid.to_string().c_str(), data.data.size());
+#            }
+#            ESP_LOGD("ble_adv", "  Advertised manufacturer data:");
+#            for (auto data : x.get_manufacturer_datas()) {
+#                ESP_LOGD("ble_adv", "    - %s: (length %i)", data.uuid.to_string().c_str(), data.data.size());
+#            }
+#  on_ble_manufacturer_data_advertise:
+#    - mac_address: xx:xx:xx:xx:xx:xx
+#      manufacturer_id: 0590
+#      then:
+#        - lambda: |-
+#            if (x[0] != 0x7b || x[1] != 0x61) return;
+#            int value = x[2] + (x[3] << 8);
+#            id(ble_sensor).publish_state(value);
+#  on_ble_service_data_advertise:
+#    - mac_address: xx:xx:xx:xx:xx:xx
+#      service_uuid: 181A
+#      then:
+#        - lambda: 'id(ble_sensor).publish_state(x[0]);'
+#  on_scan_end:
+#    - then:
+#        - lambda: |-
+#             ESP_LOGD("ble_auto", "The scan has ended!");
+#
+#sensor:
+#  - platform: template
+#    name: "BLE Sensor"
+#    id: ble_sensor
+
+binary_sensor:
+  - platform: template
+    name: "${friendly_name} forbindelse status"
+    id: bed_jacob_remote_connection_status
+
+ble_client:
+  - mac_address: ${mac_address}
+    id: rc_bed_jacob
+    on_connect:
+      then:
+        - lambda: |-
+            ESP_LOGD("ble_client_lambda", "Connected to BLE device Jacob Bed");
+        - binary_sensor.template.publish:
+            id: bed_jacob_remote_connection_status
+            state: True
+    on_disconnect:
+      then:
+        - lambda: |-
+            ESP_LOGD("ble_client_lambda", "Disconnected from BLE device Jacob Bed");
+        - binary_sensor.template.publish:
+            id: bed_jacob_remote_connection_status
+            state: False
+
+switch:
+  - platform: template
+    name: "${friendly_name} Lys"
+    id: bed_jacob_light
+    icon: "mdi:lightbulb-outline"
+    optimistic: true
+    turn_on_action:
+      - ble_client.ble_write:
+          id: rc_bed_jacob
+          service_uuid: 99fa0001-338a-1024-8a49-009c0215f78a
+          characteristic_uuid: 99fa0002-338a-1024-8a49-009c0215f78a
+          value: [0x92, 0x00]
+    turn_off_action:
+      - ble_client.ble_write:
+          id: rc_bed_jacob
+          service_uuid: 99fa0001-338a-1024-8a49-009c0215f78a
+          characteristic_uuid: 99fa0002-338a-1024-8a49-009c0215f78a
+          value: [0x93, 0x00]   
+
+# button:
+#   - platform: template
+#     name: "${friendly_name} hoved op"
+#     icon: "mdi:bed"
+#     on_press:
+#       - script.execute:
+#           id: control_bed_jacob
+#           section: 1 #head
+#           direction: 1 #up
+#   - platform: template
+#     name: "${friendly_name} hoved ned"
+#     icon: "mdi:bed"
+#     on_press:
+#       - script.execute:
+#           id: control_bed_jacob
+#           section: 1 #head
+#           direction: 0 #down
+#   - platform: template
+#     name: "${friendly_name} hoved/fod op"
+#     icon: "mdi:bed"
+#     on_press:
+#       - script.execute:
+#           id: control_bed_jacob
+#           section: 3 #head/feet
+#           direction: 1 #up
+#   - platform: template
+#     name: "${friendly_name} hoved/fod ned"
+#     icon: "mdi:bed"
+#     on_press:
+#       - script.execute:
+#           id: control_bed_jacob
+#           section: 3 #head/feet
+#           direction: 0 #down
+#   - platform: template
+#     name: "${friendly_name} fod op"
+#     icon: "mdi:bed"
+#     on_press:
+#       - script.execute:
+#           id: control_bed_jacob
+#           section: 2 #feet
+#           direction: 1 #down
+#   - platform: template
+#     name: "${friendly_name} fod ned"
+#     icon: "mdi:bed"
+#     on_press:
+#       - script.execute:
+#           id: control_bed_jacob
+#           section: 2 #feet
+#           direction: 0 #down
+#   - platform: template
+#     name: "${friendly_name} stop"
+#     id: bed_annick_end_move
+#     icon: "mdi:stop-circle-outline"
+#     on_press:
+#       - logger.log: "Stopping all commands for bed Jacob"
+#       - script.execute: control_bed_jacob_stop_cmd
+
+script:
+  - id: control_bed_jacob
+    mode: restart 
+    parameters:
+      section: int #1 head, 2 feet, 3 both
+      direction: int # 1 up, 0 down
+    then:
+      - ble_client.ble_write: #send stop command
+          id: rc_bed_jacob
+          service_uuid: 99fa0001-338a-1024-8a49-009c0215f78a
+          characteristic_uuid: 99fa0002-338a-1024-8a49-009c0215f78a
+          value: [0xFF, 0x00] 
+      # Check what task to perform
+      - lambda: |-
+          switch (section) {
+            case 1: if (direction == 1) { 
+              id(control_bed_jacob_head_up).execute();
+              return;
+            } else {
+              id(control_bed_jacob_head_down).execute();
+              return;
+            };
+            case 2: if (direction == 1){ 
+              id(control_bed_jacob_feet_up).execute();
+              return;
+            } else {
+              id(control_bed_jacob_feet_down).execute();
+              return;
+            };
+            case 3: if (direction == 1){ 
+              id(control_bed_jacob_both_up).execute();
+              return;
+            } else {
+              id(control_bed_jacob_both_down).execute();
+              return;
+            };
+            default: {      
+              id(control_bed_jacob_stop_cmd).execute();
+              return;
+            }
+          }
+
+  - id: control_bed_jacob_head_up
+    mode: single
+    then:
+      - script.stop: control_bed_jacob_both_down
+      - script.stop: control_bed_jacob_both_up
+      - script.stop: control_bed_jacob_feet_down
+      - script.stop: control_bed_jacob_feet_up
+      - script.stop: control_bed_jacob_head_down
+      #- script.stop: control_bed_jacob_head_up
+      - repeat:
+          count: 100 #this is not fully up(!)
+          then:
+            - ble_client.ble_write:
+                id: rc_bed_jacob
+                service_uuid: 99fa0001-338a-1024-8a49-009c0215f78a
+                characteristic_uuid: 99fa0002-338a-1024-8a49-009c0215f78a
+                value: [0x0b, 0x00]
+            - delay: 300ms
+            - logger.log: "repeat head UP Jacob"
+
+  - id: control_bed_jacob_head_down
+    mode: single
+    then:
+      - script.stop: control_bed_jacob_both_down
+      - script.stop: control_bed_jacob_both_up
+      - script.stop: control_bed_jacob_feet_down
+      - script.stop: control_bed_jacob_feet_up
+      #- script.stop: control_bed_jacob_head_down
+      - script.stop: control_bed_jacob_head_up
+      - repeat:
+          count: 100 # 70 is typically enough
+          then:
+            - ble_client.ble_write:
+                id: rc_bed_jacob
+                service_uuid: 99fa0001-338a-1024-8a49-009c0215f78a
+                characteristic_uuid: 99fa0002-338a-1024-8a49-009c0215f78a
+                value: [0x0a, 0x00]
+            - delay: 300ms
+            - logger.log: "repeat head DOWN Jacob"
+
+  - id: control_bed_jacob_feet_up
+    mode: single
+    then:
+      - script.stop: control_bed_jacob_both_down
+      - script.stop: control_bed_jacob_both_up
+      - script.stop: control_bed_jacob_feet_down
+      #- script.stop: control_bed_jacob_feet_up
+      - script.stop: control_bed_jacob_head_down
+      - script.stop: control_bed_jacob_head_up
+      - repeat:
+          count: 100 # 40 is typically enough
+          then:
+            - ble_client.ble_write:
+                id: rc_bed_jacob
+                service_uuid: 99fa0001-338a-1024-8a49-009c0215f78a
+                characteristic_uuid: 99fa0002-338a-1024-8a49-009c0215f78a
+                value: [0x09, 0x00]
+            - delay: 300ms
+            - logger.log: "repeat feet UP Jacob"
+
+  - id: control_bed_jacob_feet_down
+    mode: single
+    then:
+      - script.stop: control_bed_jacob_both_down
+      - script.stop: control_bed_jacob_both_up
+      #- script.stop: control_bed_jacob_feet_down
+      - script.stop: control_bed_jacob_feet_up
+      - script.stop: control_bed_jacob_head_down
+      - script.stop: control_bed_jacob_head_up
+      - repeat:
+          count: 100 # 50 is typically enough
+          then:
+            - ble_client.ble_write:
+                id: rc_bed_jacob
+                service_uuid: 99fa0001-338a-1024-8a49-009c0215f78a
+                characteristic_uuid: 99fa0002-338a-1024-8a49-009c0215f78a
+                value: [0x08, 0x00]
+            - delay: 300ms
+            - logger.log: "repeat feet DOWN Jacob"
+
+  - id: control_bed_jacob_both_up
+    mode: single
+    then:
+      - script.stop: control_bed_jacob_both_down
+      #- script.stop: control_bed_jacob_both_up
+      - script.stop: control_bed_jacob_feet_down
+      - script.stop: control_bed_jacob_feet_up
+      - script.stop: control_bed_jacob_head_down
+      - script.stop: control_bed_jacob_head_up
+      - repeat:
+          count: 100
+          then:
+            - ble_client.ble_write:
+                id: rc_bed_jacob
+                service_uuid: 99fa0001-338a-1024-8a49-009c0215f78a
+                characteristic_uuid: 99fa0002-338a-1024-8a49-009c0215f78a
+                value: [0x01, 0x00]
+            - delay: 300ms
+            - logger.log: "repeat both UP Jacob"
+
+  - id: control_bed_jacob_both_down
+    mode: single
+    then:
+      #- script.stop: control_bed_jacob_both_down
+      - script.stop: control_bed_jacob_both_up
+      - script.stop: control_bed_jacob_feet_down
+      - script.stop: control_bed_jacob_feet_up
+      - script.stop: control_bed_jacob_head_down
+      - script.stop: control_bed_jacob_head_up
+      - repeat:
+          count: 100 # 70 is typically enough
+          then:
+            - ble_client.ble_write:
+                id: rc_bed_jacob
+                service_uuid: 99fa0001-338a-1024-8a49-009c0215f78a
+                characteristic_uuid: 99fa0002-338a-1024-8a49-009c0215f78a
+                value: [0x00, 0x00]
+            - delay: 300ms
+            - logger.log: "repeat both DOWN Jacob"
+
+  - id: control_bed_jacob_stop_cmd
+    mode: single
+    then:
+      - script.stop: control_bed_jacob_both_down
+      - script.stop: control_bed_jacob_both_up
+      - script.stop: control_bed_jacob_feet_down
+      - script.stop: control_bed_jacob_feet_up
+      - script.stop: control_bed_jacob_head_down
+      - script.stop: control_bed_jacob_head_up
+
+# General preset scripts
+
+  # Preset 1
+  - id: preset_1_select
+    mode: single
+    then:
+      - script.stop: control_bed_jacob_both_down
+      - script.stop: control_bed_jacob_both_up
+      - script.stop: control_bed_jacob_feet_down
+      - script.stop: control_bed_jacob_feet_up
+      - script.stop: control_bed_jacob_head_down
+      - script.stop: control_bed_jacob_head_up      
+      - repeat:
+          count: 100
+          then:
+            - ble_client.ble_write:
+                id: rc_bed_jacob
+                service_uuid: 99fa0001-338a-1024-8a49-009c0215f78a
+                characteristic_uuid: 99fa0002-338a-1024-8a49-009c0215f78a
+                value: [0x0E, 0x00] 
+            - delay: 300ms
+            - logger.log: "Run preset 1" 
+
+  # Preset 2
+  - id: preset_2_select
+    mode: single
+    then:
+      - script.stop: control_bed_jacob_both_down
+      - script.stop: control_bed_jacob_both_up
+      - script.stop: control_bed_jacob_feet_down
+      - script.stop: control_bed_jacob_feet_up
+      - script.stop: control_bed_jacob_head_down
+      - script.stop: control_bed_jacob_head_up      
+      - repeat:
+          count: 100
+          then:
+            - ble_client.ble_write:
+                id: rc_bed_jacob
+                service_uuid: 99fa0001-338a-1024-8a49-009c0215f78a
+                characteristic_uuid: 99fa0002-338a-1024-8a49-009c0215f78a
+                value: [0x0F, 0x00] 
+            - delay: 300ms
+            - logger.log: "Run preset 2"
+
+  # Preset 3
+  - id: preset_3_select
+    mode: single
+    then:
+      - script.stop: control_bed_jacob_both_down
+      - script.stop: control_bed_jacob_both_up
+      - script.stop: control_bed_jacob_feet_down
+      - script.stop: control_bed_jacob_feet_up
+      - script.stop: control_bed_jacob_head_down
+      - script.stop: control_bed_jacob_head_up      
+      - repeat:
+          count: 100
+          then:
+            - ble_client.ble_write:
+                id: rc_bed_jacob
+                service_uuid: 99fa0001-338a-1024-8a49-009c0215f78a
+                characteristic_uuid: 99fa0002-338a-1024-8a49-009c0215f78a
+                value: [0x0C, 0x00] 
+            - delay: 300ms
+            - logger.log: "Run preset 3" 
+
+  # Preset 4
+  - id: preset_4_select
+    mode: single
+    then:
+      - script.stop: control_bed_jacob_both_down
+      - script.stop: control_bed_jacob_both_up
+      - script.stop: control_bed_jacob_feet_down
+      - script.stop: control_bed_jacob_feet_up
+      - script.stop: control_bed_jacob_head_down
+      - script.stop: control_bed_jacob_head_up      
+      - repeat:
+          count: 100
+          then:
+            - ble_client.ble_write:
+                id: rc_bed_jacob
+                service_uuid: 99fa0001-338a-1024-8a49-009c0215f78a
+                characteristic_uuid: 99fa0002-338a-1024-8a49-009c0215f78a
+                value: [0x44, 0x00] 
+            - delay: 300ms
+            - logger.log: "Run preset 4"       
+
+################## COVER til Styring #################################
+
+cover:
+
+### Hoved + ben 
+
+  - platform: template
+    name: "${friendly_name} hoved/fod"
+    id: both_actuators
+    assumed_state: true
+    icon: "mdi:bed"
+    # lambda: |-
+    #   if (id(hoved_percent).state >= 1) {
+    #     return COVER_OPEN;
+    #   } else {
+    #     return COVER_CLOSED;
+    #   }
+    open_action:
+      - script.execute:
+          id: control_bed_jacob
+          section: 3 #head/feet
+          direction: 1 #up
+      - logger.log: "Repeat both actuators UP"
+    stop_action:
+      - script.execute: control_bed_jacob_stop_cmd
+      - logger.log: "Action stopped"     
+    close_action:
+      - script.execute:
+          id: control_bed_jacob
+          section: 3 #head/feet
+          direction: 0 #down
+      - logger.log: "Repeat both actuators DOWN" 
+
+### Hoved  
+
+  - platform: template
+    name: "${friendly_name} Head"
+    id: head_actuator
+    assumed_state: true
+    icon: "mdi:bed"
+    open_action:
+      - script.execute:
+          id: control_bed_jacob
+          section: 1 #head
+          direction: 1 #up
+      - logger.log: "Repeat head actuator UP"
+    stop_action:
+      - script.execute: control_bed_jacob_stop_cmd
+      - logger.log: "Action stopped"      
+    close_action:
+      - script.execute:
+          id: control_bed_jacob
+          section: 1 #head
+          direction: 0 #down
+      - logger.log: "Repeat head actuator DOWN"    
+
+### Ben 
+
+  - platform: template
+    name: "${friendly_name} Legs"
+    id: leg_actuator
+    assumed_state: true
+    icon: "mdi:bed"
+    open_action:
+      - script.execute:
+          id: control_bed_jacob
+          section: 2 #feet
+          direction: 1 #down
+      - logger.log: "Repeat legs actuator UP"
+    stop_action:
+      - script.execute: control_bed_jacob_stop_cmd
+      - logger.log: "Action stopped"      
+    close_action:
+      - script.execute:
+          id: control_bed_jacob
+          section: 2 #feet
+          direction: 0 #down
+      - logger.log: "Repeat leg actuator DOWN" 
+
+###################### Preset Storing Buttons ##############################
+
+button:   
+
+### Presets mv.   
+
+  - platform: template
+    name: "${friendly_name} Gem Preset 1"
+    id: store_preset_1
+    icon: "mdi:file-account"
+    entity_category: config
+    on_press:
+      then:
+        - ble_client.ble_write:
+            id: rc_bed_jacob
+            service_uuid: 99fa0001-338a-1024-8a49-009c0215f78a
+            characteristic_uuid: 99fa0002-338a-1024-8a49-009c0215f78a
+            value: [0x38, 0x00] 
+        - logger.log: "Preset 1 Saved"             
+
+  - platform: template
+    name: "${friendly_name} Gem Preset 2"
+    id: store_preset_2
+    icon: "mdi:file-account"
+    entity_category: config
+    on_press:
+      then:
+        - ble_client.ble_write:
+            id: rc_bed_jacob
+            service_uuid: 99fa0001-338a-1024-8a49-009c0215f78a
+            characteristic_uuid: 99fa0002-338a-1024-8a49-009c0215f78a
+            value: [0x39, 0x00]
+        - logger.log: "Preset 2 Saved"              
+
+  - platform: template
+    name: "${friendly_name} Gem Preset 3"
+    id: store_preset_3
+    icon: "mdi:file-account"
+    entity_category: config
+    on_press:
+      then:
+        - ble_client.ble_write:
+            id: rc_bed_jacob
+            service_uuid: 99fa0001-338a-1024-8a49-009c0215f78a
+            characteristic_uuid: 99fa0002-338a-1024-8a49-009c0215f78a
+            value: [0x3A, 0x00] 
+        - logger.log: "Preset 3 Saved"      
+
+  - platform: template
+    name: "${friendly_name} Gem Preset 4"
+    id: store_preset_4
+    icon: "mdi:file-account"
+    entity_category: config
+    on_press:
+      then:
+        - ble_client.ble_write:
+            id: rc_bed_jacob
+            service_uuid: 99fa0001-338a-1024-8a49-009c0215f78a
+            characteristic_uuid: 99fa0002-338a-1024-8a49-009c0215f78a
+            value: [0x45, 0x00] 
+        - logger.log: "Preset 4 Saved"  
+
+###################### Preset Select ##############################
+
+select:
+  - platform: template
+    id: select_preset
+    name: ${friendly_name} Preset Mode
+    optimistic: true
+    options:
+      - "Flad"
+      - "Sove"
+      - "TV"
+      - "Helt Oppe" 
+    initial_option: Flad      
+    on_value:
+      then:
+        - lambda: |-
+            if (id(select_preset).state == "Flad") {
+              id(preset_1_select).execute();
+
+            } else if (id(select_preset).state == "Sove") {
+              id(preset_2_select).execute();
+
+            } else if (id(select_preset).state == "TV") {
+              id(preset_3_select).execute();
+
+            } else if (id(select_preset).state == "Helt Oppe") {
+              id(preset_4_select).execute();
+
+            }                    
